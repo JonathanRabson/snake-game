@@ -39,12 +39,13 @@ _.extend(snake, standardBox, defaultMotion); //Snake combines static and dynamic
 _.extend(food, standardBox); //Food uses just static properties.
 
 
-//Implements brute-force algorithm to find unoccupied spaice. Doing it based on "knowing" may require iterating through all spaces, which may be slower.
+//Additional methods for "food object"//
+
+//placeFood: Implements brute-force algorithm to find unoccupied space. Doing it based on "knowing" may require iterating through all spaces, which may be slower.
 //This will be implemented within the redrawing loop, so that if it did take a lot of time, it would not restrict movement.
 //For that reason, it does not try to do a hash map of places already found.
 food.placeFood = function () {
 	var effectiveWidth = canvasWidth - ((3 * this.edge) + this.squareWidth); //To the left of the leftmost posX is a border, and then when one goes rightmost, there's a square with two borders.
-	var boxWidth = (2 * this.edge) + this.squareWidth;
 	var arrCheckArray;
 	var checkTaken;
 				
@@ -54,7 +55,7 @@ food.placeFood = function () {
 		this.posY = Math.random() * effectiveWidth;
 		
 		//See if the four corners of the space are okay.
-		arrCheckArray = context.checkCornerPixels(this.posX,this.posY, boxWidth, boxWidth);
+		arrCheckArray = context.checkCornerPixels(this.posX,this.posY, this.fullWidth(), this.fullWidth());
 		
 		checkTaken = _.reduce(arrCheckArray, function(memo, num){ return memo + num; }, 0);
 						
@@ -73,10 +74,11 @@ food.placeFood = function () {
 }
 
 food.disappear = function() {
-	context.clear(this.posX - (this.edge + 1),this.posY - (this.edge + 1), this.squareWidth + (this.edge*2) + 2, this.squareWidth + (this.edge*2) + 2);
+	context.clear(this.posX - (this.edge + 1),this.posY - (this.edge + 1), this.fullWidth() + 2, this.fullWidth() + 2);
 	this.foodPlaced = false;
 }
 
+//Additional methods for "snake" object
 
 //Function to determine the "leading edge" when detecting what it's about to hit.
 //Pass X or Y as a string to get data for X or Y. (Anything but X is assumed Y.)
@@ -95,7 +97,6 @@ snake.leadingXorY = function(strXorY, bEdgeWidth) {
 		pos = this.posY;			
 	
 	}
-
 
 	if(bEdgeWidth) {
 		if(move === 0) {
@@ -119,6 +120,8 @@ snake.leadingXorY = function(strXorY, bEdgeWidth) {
 
 }
 
+//Event-related functions//
+
 function canvasClicked(event)
 {
 	togglePlayOrPause = true;
@@ -128,7 +131,6 @@ function canvasClicked(event)
 	restartTimer();
 } 
 
-	
 function checkKey(e) {
 	e = e || window.event;
 				
@@ -166,11 +168,7 @@ function checkKey(e) {
 			    
 }
 
-function refreshGame() {
-	location.reload();
-}
-
-//Disallow 180-degree turns
+//Disallow 180-degree turns (utility function used by checkKey)
 function newPos(old,newone) {
 	if(old + newone != 0) {
 		snake.newDirFlag = 1; //Ready to turn
@@ -179,6 +177,8 @@ function newPos(old,newone) {
 		return old;
 	}
 }
+
+//Main global functions//
 
 //initialize and start timer.
 function initializeGame() {
@@ -211,6 +211,11 @@ function restartTimer() {
 	var objTime = new Date();
 	timeNow = objTime;
 	requestAnimationFrame(function() {redrawCanvas(false);});
+}
+
+//function to restart after game is over
+function refreshGame() {
+	location.reload();
 }
 
 //Get rid of array entries that are no longer needed
@@ -246,13 +251,196 @@ function atEdge(bMakeIt) {
 	return result;
 }
 
+//Function to manage snake's clearing and tail by adding its location to an array
+function addToWhereItHasBeen(left,top,width,height) {
+	var objRectangle;
+	var xStart, yStart, xLength, yLength;
+
+	if((snake.arrWhereItHasBeen.length === 0) || (snake.newDirFlag === 2)) {
+		if(snake.newDirFlag === 2) {
+			
+			if(snake.moveX > 0) {
+				//It's going right from having been vertical.
+				xStart = _.last(snake.arrWhereItHasBeen).xStart() + snake.edge;
+				yStart = top;
+				xLength = (left + width) - xStart;
+				yLength = height;
+			} else if(snake.moveX < 0) {
+				//It's going left from having been vertical.
+				xStart = left + (4*snake.edge); //(6*snake.edge if it was from going up)
+				if(snake.moveYLast < 0) {
+					xStart += (snake.squareWidth - snake.edge/2);
+				}
+				yStart = top;
+				xLength = _.last(snake.arrWhereItHasBeen).xStart() - left;
+				yLength = height;			
+			} else if(snake.moveY < 0) {
+				//It's going up from having been horizontal.
+				xStart = left;
+				yStart = top;
+				xLength = width;
+				yLength = Math.abs(top - _.last(snake.arrWhereItHasBeen).yEnd());	
+			} else if (snake.moveY > 0) {
+				//It's going down from having been horizontal.
+				xStart = left;
+				yStart = top;
+				
+				if(snake.moveXLast < 0) {
+					yStart -= (snake.squareWidth - (snake.edge/2));
+				}
+				
+				xLength = width;
+				yLength = top - _.last(snake.arrWhereItHasBeen).yStart(); 	
+				
+				/*
+				xStart = left;
+				yStart = _.last(snake.arrWhereItHasBeen).yEnd();
+				xLength = width;
+				yLength = (top + height) - yStart; 
+				*/
+			}					
+			objRectangle = new rectangle(xStart, yStart, xLength, yLength);
+			snake.newDirFlag = 0;	
+		} else {			
+			objRectangle = new rectangle(left,top,width,height);
+		}
+		snake.arrWhereItHasBeen.push(objRectangle);
+	} else {			
+		//Update the potential tail within this direction segment.
+		_.last(snake.arrWhereItHasBeen).newExtent(left,top,width,height);
+	}
+}
+
+//Main function to draw items on the canvas
+function redrawCanvas(bLastTime) {
+	var moveXTimed = 0;		//Unless otherwise calculated, don't move it in this direction
+	var moveYTimed = 0;
+	
+				
+	var deltaTime;			//Time elapsed from last screen redraw
+	var objTime = new Date();	//Grab new time
+	var arrCheckArray;
+	var bFoodEaten;
+	var bAteTail;
+	
+	if(togglePlayOrPause && !gameOver) {
+		timeLast = timeNow;		//Archive previous time to find delta
+						
+		//Try to place food
+		food.placeFood();
+		
+		timeNow = objTime;		//Current time
+		
+				
+		deltaTime = timeNow-timeLast;	//Calculate change in time
+						
+		//Based on if direction is flagged, schedule the move based on a ".pace" constant times the time change.
+		if(snake.moveX != 0) {
+			moveXTimed = Math.ceil(snake.moveX * deltaTime * snake.pace);
+		}
+		if(snake.moveY != 0) {
+			moveYTimed = Math.ceil(snake.moveY * deltaTime * snake.pace);
+		}		
+		
+		arrCheckArray = context.checkCornerPixels(snake.leadingXorY('X', false),snake.leadingXorY('Y',false),snake.leadingXorY('X', true),snake.leadingXorY('Y',true));
+		
+		bFoodEaten = false;
+		
+		//Note - This check hard-codes some values that are configurable regarding colors and behavior of food.
+		for(var i=0;i<arrCheckArray.length;i++) {
+			if((i%4 == 0) && food.foodPlaced && (arrCheckArray[i] == 255)) {
+				bFoodEaten = true; //conditionally...
+			} else if((i+1)%4 == 0) {
+				//This is the opacity.
+				if(arrCheckArray[i] < 30) {
+					//At high speeds, a low opacity reading may indicate a false alarm.
+					bAteTail = false;
+				}
+			} else if (arrCheckArray[i] != 0){
+				bAteTail = true;					
+			}
+		}
+		
+		if(bAteTail) {
+			//Show where it self-intersected.
+			context
+				.color('rgba(0,255,0,1)')
+				.borderColor(colors.atetail)
+				.borderWidth(0)
+				.draw(snake.leadingXorY('X', false),snake.leadingXorY('Y',false),snake.leadingXorY('X', true),snake.leadingXorY('Y',true))
+			;
+			console.log("self intersection" + arrCheckArray);
+	
+		
+		}
+						
+		if(bFoodEaten) {
+			food.disappear();
+			//Add points
+			points += pointIncrement;
+			elemPoints.innerHTML = points;
+			
+			//Lengthen tail and speed up pace.
+			snake.tailAmount += food.fullWidth();
+			snake.pace = 1.1 * snake.pace;					
+		}
+					
+		//Set up what object should look like, draw it.
+		context
+			.handleTail(snake.posX,snake.posY,snake.squareWidth,snake.squareWidth)
+			.color(colors.snakehead)
+			.borderColor(colors.snakeborder)
+			.borderWidth(snake.edge*2)
+			.draw(snake.posX,snake.posY,snake.squareWidth,snake.squareWidth)
+		;
+		addToWhereItHasBeen(snake.posX,snake.posY,snake.squareWidth,snake.squareWidth);
+		
+		 //Get positions ready for next time.
+		snake.posX += moveXTimed;
+		snake.posY += moveYTimed;
+						
+		//It's ready to turn; so on the next round it turns.
+		if(snake.newDirFlag === 1) {
+			snake.newDirFlag = 2;
+		}
+									
+		if(atEdge(false) || bAteTail) {
+			if(bLastTime) {
+				context.message('Game over. Click screen to restart.');
+				gameOver = true;
+			} else {
+				if(!bAteTail) {
+					atEdge(true);
+				}
+				requestAnimationFrame(function() {redrawCanvas(true);});			
+			}
+		} else {
+			requestAnimationFrame(function() {redrawCanvas(false);});
+		}
+	}
+		
+}
+
+
+
+//Constructor functions//
 
 //Constructor for generic box-like object...
 function boxObject() {
+	var _fullWidth = 0;
+
 	this.squareWidth;
 	this.edge;
 	this.posX;
 	this.posY;
+	
+	//Convenience function to return width with borders on both sides
+	this.fullWidth = function() {
+		if(_fullWidth === 0 || isNaN(_fullWidth)) {
+			_fullWidth = (this.edge * 2) + this.squareWidth;
+		}
+		return _fullWidth;
+	}
 }
 
 //Constructor to set up snake object
@@ -524,175 +712,6 @@ function rectangle(xStart, yStart, xLength, yLength) {
 				
 }
 
-function addToWhereItHasBeen(left,top,width,height) {
-	var objRectangle;
-	var xStart, yStart, xLength, yLength;
-
-	if((snake.arrWhereItHasBeen.length === 0) || (snake.newDirFlag === 2)) {
-		if(snake.newDirFlag === 2) {
-			
-			if(snake.moveX > 0) {
-				//It's going right from having been vertical.
-				xStart = _.last(snake.arrWhereItHasBeen).xStart() + snake.edge;
-				yStart = top;
-				xLength = (left + width) - xStart;
-				yLength = height;
-			} else if(snake.moveX < 0) {
-				//It's going left from having been vertical.
-				xStart = left + (4*snake.edge); //(6*snake.edge if it was from going up)
-				if(snake.moveYLast < 0) {
-					xStart += (snake.squareWidth - snake.edge/2);
-				}
-				yStart = top;
-				xLength = _.last(snake.arrWhereItHasBeen).xStart() - left;
-				yLength = height;			
-			} else if(snake.moveY < 0) {
-				//It's going up from having been horizontal.
-				xStart = left;
-				yStart = top;
-				xLength = width;
-				yLength = Math.abs(top - _.last(snake.arrWhereItHasBeen).yEnd());	
-			} else if (snake.moveY > 0) {
-				//It's going down from having been horizontal.
-				xStart = left;
-				yStart = top;
-				
-				if(snake.moveXLast < 0) {
-					yStart -= (snake.squareWidth - (snake.edge/2));
-				}
-				
-				xLength = width;
-				yLength = top - _.last(snake.arrWhereItHasBeen).yStart(); 	
-				
-				/*
-				xStart = left;
-				yStart = _.last(snake.arrWhereItHasBeen).yEnd();
-				xLength = width;
-				yLength = (top + height) - yStart; 
-				*/
-			}					
-			objRectangle = new rectangle(xStart, yStart, xLength, yLength);
-			snake.newDirFlag = 0;	
-		} else {			
-			objRectangle = new rectangle(left,top,width,height);
-		}
-		snake.arrWhereItHasBeen.push(objRectangle);
-	} else {			
-		//Update the potential tail within this direction segment.
-		_.last(snake.arrWhereItHasBeen).newExtent(left,top,width,height);
-	}
-}
-			
-function redrawCanvas(bLastTime) {
-	var moveXTimed = 0;		//Unless otherwise calculated, don't move it in this direction
-	var moveYTimed = 0;
-	
-				
-	var deltaTime;			//Time elapsed from last screen redraw
-	var objTime = new Date();	//Grab new time
-	var arrCheckArray;
-	var bFoodEaten;
-	var bAteTail;
-	
-	if(togglePlayOrPause && !gameOver) {
-		timeLast = timeNow;		//Archive previous time to find delta
-						
-		//Try to place food
-		food.placeFood();
-		
-		
-		
-		timeNow = objTime;		//Current time
-		
-				
-		deltaTime = timeNow-timeLast;	//Calculate change in time
-						
-		//Based on if direction is flagged, schedule the move based on a ".pace" constant times the time change.
-		if(snake.moveX != 0) {
-			moveXTimed = Math.ceil(snake.moveX * deltaTime * snake.pace);
-		}
-		if(snake.moveY != 0) {
-			moveYTimed = Math.ceil(snake.moveY * deltaTime * snake.pace);
-		}		
-		
-		arrCheckArray = context.checkCornerPixels(snake.leadingXorY('X', false),snake.leadingXorY('Y',false),snake.leadingXorY('X', true),snake.leadingXorY('Y',true));
-		
-		bFoodEaten = false;
-		
-		//Note - This check hard-codes some values that are configurable regarding colors and behavior of food.
-		for(var i=0;i<arrCheckArray.length;i++) {
-			if((i%4 == 0) && food.foodPlaced && (arrCheckArray[i] == 255)) {
-				bFoodEaten = true; //conditionally...
-			} else if((i+1)%4 == 0) {
-				//This is the opacity.
-				if(arrCheckArray[i] < 30) {
-					//At high speeds, a low opacity reading may indicate a false alarm.
-					bAteTail = false;
-				}
-			} else if (arrCheckArray[i] != 0){
-				bAteTail = true;					
-			}
-		}
-		
-		if(bAteTail) {
-			//Show where it self-intersected.
-			context
-				.color('rgba(0,255,0,1)')
-				.borderColor(colors.atetail)
-				.borderWidth(0)
-				.draw(snake.leadingXorY('X', false),snake.leadingXorY('Y',false),snake.leadingXorY('X', true),snake.leadingXorY('Y',true))
-			;
-			console.log("self intersection" + arrCheckArray);
-	
-		
-		}
-						
-		if(bFoodEaten) {
-			food.disappear();
-			//Add points
-			points += pointIncrement;
-			elemPoints.innerHTML = points;
-			
-			//Lengthen tail and speed up pace.
-			snake.tailAmount += ((food.edge * 2) + food.squareWidth);
-			snake.pace = 1.1 * snake.pace;					
-		}
-					
-		//Set up what object should look like, draw it.
-		context
-			.handleTail(snake.posX,snake.posY,snake.squareWidth,snake.squareWidth)
-			.color(colors.snakehead)
-			.borderColor(colors.snakeborder)
-			.borderWidth(snake.edge*2)
-			.draw(snake.posX,snake.posY,snake.squareWidth,snake.squareWidth)
-		;
-		addToWhereItHasBeen(snake.posX,snake.posY,snake.squareWidth,snake.squareWidth);
-		
-		 //Get positions ready for next time.
-		snake.posX += moveXTimed;
-		snake.posY += moveYTimed;
-						
-		//It's ready to turn; so on the next round it turns.
-		if(snake.newDirFlag === 1) {
-			snake.newDirFlag = 2;
-		}
-									
-		if(atEdge(false) || bAteTail) {
-			if(bLastTime) {
-				context.message('Game over. Click screen to restart.');
-				gameOver = true;
-			} else {
-				if(!bAteTail) {
-					atEdge(true);
-				}
-				requestAnimationFrame(function() {redrawCanvas(true);});			
-			}
-		} else {
-			requestAnimationFrame(function() {redrawCanvas(false);});
-		}
-	}
-		
-}
 
 
 
