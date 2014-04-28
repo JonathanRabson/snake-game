@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+	<title>Snake!</title>
+	<link rel="stylesheet" type="text/css" href="snakejr.css">		
+	<script src="http://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.6.0/underscore-min.js"></script>	
+	<script src="snakejr.js"></script>
+
+</head>
+<body onLoad="initializeGame();">
+
+	<div class="centered">
+		<header>Snake!</header>
+		<canvas id="snakeBoard" width="400" height="400" style="border:1px solid #000000;">
+			Your browser does not support the HTML5 canvas tag.
+		</canvas>
+		<div class="bottom-text">
+			<p class="flushtop">Points: <span id="points">0</span></p>
+			<p>Use arrow keys to change direction at right angles. Press the spacebar to pause. Game is over if the snake hits the wall or itself. Click on play area to restart.</p>
+		</div>
+	</div>
+
+</body>
+</html>
