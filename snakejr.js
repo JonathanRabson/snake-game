@@ -342,6 +342,10 @@ function redrawCanvas(bLastTime) {
 			moveYTimed = Math.ceil(snake.moveY * deltaTime * snake.pace);
 		}		
 		
+		//We will do two checks - One that can tell both if the food is eaten and if the snake has run into itself,
+		//and the other an additional check on the food to see if it has been partially eaten beyond a certain amount.
+		
+		//First check - regular check:  Determine if the snake is about to go into the food or itself:
 		arrCheckArray = context.checkCornerPixels(snake.leadingXorY('X', false),snake.leadingXorY('Y',false),snake.leadingXorY('X', true),snake.leadingXorY('Y',true));
 		
 		bFoodEaten = false;
@@ -372,6 +376,22 @@ function redrawCanvas(bLastTime) {
 			console.log("self intersection" + arrCheckArray);
 	
 		
+		} else if(!bFoodEaten) {
+			//Second check:  See if the food is "substantially eaten."  This is necessary because of a high probability when the game speeds up
+			//of "skipping over" the food and thereby erasing it without triggering food-eaten logic
+
+			//Check four points interior to the food
+			arrCheckArray = context.checkCornerPixels(food.posX + food.edge, food.posY + food.edge, food.squareWidth, food.squareWidth);
+			
+			//Loop test: If one of those four points is red, the food is not yet eaten.
+			if(food.foodPlaced) {
+				bFoodEaten = true; //conditionally
+				for(var i=0;i<arrCheckArray.length;i+=4) {
+					if(arrCheckArray[i] == 255) {
+						bFoodEaten = false; 					
+					}
+				}	
+			}		
 		}
 						
 		if(bFoodEaten) {
